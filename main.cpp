@@ -3,49 +3,50 @@
 #include <sys/socket.h>
 #include <sys/socket.h>
 #include <unistd.h>
-
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <string>
 
-#include "ConfigParser.h"
-#include "StringUtils.h"
-#include "server.h"
-#include "relayManager.h"
-#include "relay.h"
+#include "ConfigParser.hpp"
+#include "StringUtils.hpp"
+#include "server.hpp"
+#include "relayManager.hpp"
+#include "relay.hpp"
+#include "Json.hpp"
+#include "fileReader.hpp"
 
 #define MAX_BUF_SIZE 1024
 
 
-const std::string CMD_GET = "GET";
-const std::string CMD_SET = "SET";
-const std::string CMD_QUIT = "QUIT";
-
-
-const std::string config_filename = "config.cfg";
-
-static std::map<int, std::string> relay_map;
-
-enum
+namespace Commands 
 {
-	GET,
-	SET,
-	QUIT,
-	UNKNOWN,
-};
+	const std::string CMD_GET = "GET";
+	const std::string CMD_SET = "SET";
+	const std::string CMD_QUIT = "QUIT";
+	
+	enum
+	{
+		GET,
+		SET,
+		QUIT,
+		UNKNOWN,
+	};
+}
+
+
+namespace Config 
+{
+	const std::string config_filename = "config.json";
+}
+
+
 
 struct cmd_struct
 {
 	int cmd; // command SET, GET, QUIT
-	int arg1; // arg 1 number of relay
+	std::string periph_name; // arg 1 name of perpherial to use
 	int arg2; // arg 2 if cmd is SET this is ON or OFF
-};
-
-enum
-{
-	pompa1,
-	pompa2,
 };
 
 struct result_struct
@@ -96,71 +97,38 @@ void create_tokens(std::string &data, std::vector<std::string> &tokens)
 	}
 }
 
-// this reads file content and ommits data which is preceded by commenChar
-// input:
-// 		@filename - this is filename of file which should be read
-//  	@commentchar - this tells which character is used to create comments
-//			after this character line isn't read
-// output:
-//		@content - reference to which file is written, each line ends with \n character
-// 			even if endLine is \r\n
-void read_file(std::string &content, const std::string &filename, const char commentchar = '#')
-{
-	std::fstream file;
-	file.open(filename, std::fstream::in);
-
-	if (!file.good())
-	{
-		std::cout << "couldn't open config file" << std::endl;
-		return;
-	}
-
-	while(!file.eof())
-	{
-		std::string line;
-		std::getline(file, line);
-		StringUtils::cut_string(line, commentchar);
-		StringUtils::strip_whitespaces(line);
-		if (line.size() < 1) continue;
-		line.append("\n");
-		content.append(line.c_str());
-	}
-
-	file.close();
-}
-
 void parse_command(std::vector<std::string> &tokens, cmd_struct &cmd_s)
 {
 	int size = tokens.size();
 	if (size == 1) // might be quit
 	{
-		if (0 == tokens[0].compare(CMD_QUIT))
+		if (Commands::CMD_QUIT == tokens[0])
 		{
-			cmd_s.cmd = QUIT;
+			cmd_s.cmd = Commands::QUIT;
 			return;
 		}
 	}
 	else if (size == 2)  // migth be GET
 	{
-		if (0 == tokens[0].compare(CMD_GET))
+		if (Commands::CMD_GET == tokens[0])
 		{
-			cmd_s.cmd = GET;
+			cmd_s.cmd = Commands::GET;
 		}
 
-		auto value1 = std::stoi(tokens[1]);
-		cmd_s.arg1 = value1;
+		auto value1 = tokens[1];
+		cmd_s.periph_name = value1;
 		return;
 
 	}
 	else if (size == 3) // might be SET
 	{
-		if (0 == tokens[0].compare(CMD_SET))
+		if (Commands::CMD_SET == tokens[0])
 		{
-			cmd_s.cmd = SET;
+			cmd_s.cmd = Commands::SET;
 		}
 
-		auto value1 = std::stoi(tokens[1]);
-		cmd_s.arg1 = value1;
+		auto value1 = tokens[1];
+		cmd_s.periph_name = value1;
 		if (0 == tokens[2].compare(std::string("ON")))
 		{
 			cmd_s.arg2 = RelayState::ON;
@@ -191,11 +159,10 @@ void execute_command(cmd_struct &cmd, result_struct &response, int &running)
 
 	switch(cmd.cmd)
 	{
-		case GET:
+		case Commands::GET:
 		{
-			int res = manager.get_relay_state(relay_map[cmd.arg1]);
-			std::cout << "ARG is: " << cmd.arg1 << std::endl;
-			std::cout << "Mapped is : " << relay_map[cmd.arg1] << std::endl;
+			int res = manager.get_relay_state(cmd.periph_name);
+			std::cout << "ARG is: " << cmd.periph_name << std::endl;
 			std::cout << "RES IS: " << res << std::endl;
 			if (res == RelayState::ON) response.status = "ON\n";
 			else if (res == RelayState::OFF) response.status = "OFF\n";
@@ -203,9 +170,9 @@ void execute_command(cmd_struct &cmd, result_struct &response, int &running)
 			response.cmd_status = 0;
 			break;
 		}
-		case SET:
+		case Commands::SET:
 		{
-			int res = manager.set_relay_state(relay_map[cmd.arg1], cmd.arg2);
+			int res = manager.set_relay_state(cmd.periph_name, cmd.arg2);
 			if (res == -1)
 			{
 				response.cmd_status = -1;
@@ -218,7 +185,7 @@ void execute_command(cmd_struct &cmd, result_struct &response, int &running)
 			}
 			break;
 		}
-		case QUIT:
+		case Commands::QUIT:
 		{
 			running = 0;
 			response.cmd_status = 0;
@@ -270,30 +237,34 @@ void handle_function(int socketfd)
 
 int main()
 {
-	int relay_number = 0;
-	
-	const std::string relay1 = "relay1";
-	const std::string relay2 = "relay2";
+	const std::string therm_type = "therm";
+	const std::string relay_type = "relay";
+
 	const uint16_t port = 5050;
 
-	std::string cfg_file_content;
-	std::string basic_relay_name = "relay";	
-
-	read_file(cfg_file_content, config_filename, '#');
-	ConfigParser cfg(cfg_file_content);
-	
-	const int relay1_pin = cfg.get_value_as_int(relay1);
-	const int relay2_pin = cfg.get_value_as_int(relay2);
-
-	relay_map[relay_number++] = relay1;
-	relay_map[relay_number++] = relay2;
-	
+	const std::string cfg_file_content = FileUtils::FileReader::read_file(Config::config_filename);
+	const auto json_config = Json::Json::parse_from_string(cfg_file_content);
+	const auto periph_array = json_config["peripherals"].get_value_as_vector(); 
 
 	RelayManager &relayManager = RelayManager::get_instance();
 
+	for(const auto &periph: periph_array)
+	{
+		std::string name = periph["name"].get_value_as_string();
+		std::string type = periph["type"].get_value_as_string();
+		int pin = periph["pin"].get_value_as_int();
 
-	relayManager.add_relay(relay1, relay1_pin);
-	relayManager.add_relay(relay2, relay2_pin);
+		if (therm_type == type)
+		{
+			// TODO: add thermometer manager class and handle this
+		}
+		else if (relay_type == type)
+		{
+			relayManager.add_relay(name, pin);
+		}
+
+		std::cout << "FOUND: " << name << " TYPE IS: " << type << std::endl;
+	}
 
 	Server server(port);
 	server.start_listening(handle_function);

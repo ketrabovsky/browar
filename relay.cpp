@@ -1,4 +1,4 @@
-#include "relay.h"
+#include "relay.hpp"
 
 #include <wiringPi.h>
 

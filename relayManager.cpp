@@ -1,4 +1,4 @@
-#include "relayManager.h"
+#include "relayManager.hpp"
 
 #include <wiringPi.h>
 #include <iostream>
@@ -14,11 +14,10 @@ RelayManager& RelayManager::get_instance()
 RelayManager::RelayManager()
 {
 	int error;
-	this->mleko = 1;
 	error = wiringPiSetup();
 	if (error)
 	{
-		std::cout << "Error during wirinPiSetup" << std::endl;
+		std::cout << "Error during wiringPiSetup" << std::endl;
 	}
 }
 

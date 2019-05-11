@@ -3,13 +3,12 @@
 #include <map>
 #include <string>
 
-#include "relay.h"
+#include "relay.hpp"
 
 class RelayManager
 {
 private:
 	std::map<std::string, Relay> relays;
-	int mleko;
 	RelayManager();
 public:
 	RelayManager(const RelayManager&) = delete;

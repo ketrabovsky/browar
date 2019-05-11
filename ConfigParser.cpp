@@ -1,4 +1,4 @@
-#include "ConfigParser.h"
+#include "ConfigParser.hpp"
 
 
 ConfigParser::ConfigParser(std::string &str)

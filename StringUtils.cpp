@@ -1,4 +1,4 @@
-#include "StringUtils.h"
+#include "StringUtils.hpp"
 
 
 void StringUtils::replace_last_new_line_char(std::string &str) {

@@ -1,5 +1,5 @@
 CC=g++
-CCFLAGS=-c -std=C++11
+CCFLAGS=-c -std=c++11
 LDFLAGS=-lwiringPi -pthread
 
 OUTPUT=program
@@ -11,6 +11,8 @@ objs=main.o \
 	 ConfigParser.o \
 	 StringUtils.o \
 	 server.o \
+	 Json.o \
+	 fileReader.o \
 
 $(OUTPUT): $(objs)
 	$(CC) -o $@ $^ $(LDFLAGS)
