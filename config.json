@@ -5,21 +5,25 @@
     "peripherals" : [
         {
             "name": "heater",
+            "display_name": "grzałka",
             "pin": 15,
             "type": "relay"
         },
         {
             "name": "relay_6",
+            "display_name": "pompa",
             "pin": 10,
             "type": "relay"
         },
         {
             "name": "pompa_1",
+            "display_name": "chłodzenie",
             "pin": 16,
             "type": "relay"
         },
         {
             "name": "therm_1",
+            "display_name": "grzałka",
             "pin": 4,
             "type": "therm"
         }
